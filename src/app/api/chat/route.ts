@@ -43,6 +43,22 @@ export async function POST(request: Request) {
 
   let conversationId = incomingConversationId;
 
+  if (conversationId) {
+    const { data: existingConversation, error: lookupError } = await supabase
+      .from("conversations")
+      .select("id")
+      .eq("id", conversationId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (lookupError) {
+      return new Response("Could not verify conversation", { status: 500 });
+    }
+    if (!existingConversation) {
+      return new Response("Conversation not found", { status: 404 });
+    }
+  }
+
   if (!conversationId) {
     const lastUser = [...messages].reverse().find((m) => m.role === "user");
     const titleSource = lastUser ? textFromParts(lastUser) : "گفتگوی جدید";
@@ -67,11 +83,14 @@ export async function POST(request: Request) {
   if (lastMessage?.role === "user") {
     const content = textFromParts(lastMessage);
     if (content) {
-      await supabase.from("messages").insert({
+      const { error: messageError } = await supabase.from("messages").insert({
         conversation_id: conversationId,
         role: "user",
         content,
       });
+      if (messageError) {
+        return new Response("Could not save user message", { status: 500 });
+      }
     }
   }
 
